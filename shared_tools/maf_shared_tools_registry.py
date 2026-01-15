@@ -4,7 +4,7 @@ This is the source of truth for all local deterministic tools.
 """
 import sys
 from pathlib import Path
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, Optional
 
 
 class SharedToolsRegistry:
@@ -41,21 +41,58 @@ def get_registry() -> SharedToolsRegistry:
     
     # Import and register tools from social_signal_tools
     try:
+        # Try relative import first (when used as package)
         from . import social_signal_tools
         if hasattr(social_signal_tools, 'register_tools'):
             social_signal_tools.register_tools(registry)
-    except ImportError:
-        pass
+    except (ImportError, ValueError):
+        # Fallback to absolute import (when loaded directly)
+        try:
+            sys.path.insert(0, str(shared_tools_dir))
+            import social_signal_tools
+            if hasattr(social_signal_tools, 'register_tools'):
+                social_signal_tools.register_tools(registry)
+        except ImportError:
+            pass
     
     # Add more tool modules here as needed
-    # try:
-    #     from . import other_tools
-    #     if hasattr(other_tools, 'register_tools'):
-    #         other_tools.register_tools(registry)
-    # except ImportError:
-    #     pass
     
     return registry
+
+
+def call_tool(
+    tool_name: str,
+    args: Optional[dict] = None,
+    workflow_tools_dir: Optional[str] = None
+) -> Any:
+    """
+    Call a tool by name with the given arguments.
+    
+    Args:
+        tool_name: Name of the tool to call
+        args: Dictionary of arguments to pass to the tool
+        workflow_tools_dir: Optional workflow-specific tools directory (unused for now)
+        
+    Returns:
+        Result of the tool execution
+    """
+    registry = get_registry()
+    tool = registry.get_tool(tool_name)
+    return tool(**(args or {}))
+
+
+def list_tools(workflow_tools_dir: Optional[str] = None) -> list:
+    """
+    List all registered tool names.
+    
+    Args:
+        workflow_tools_dir: Optional workflow-specific tools directory (unused for now)
+        
+    Returns:
+        List of tool names
+    """
+    registry = get_registry()
+    return registry.list_tools()
 
 
 if __name__ == "__main__":
