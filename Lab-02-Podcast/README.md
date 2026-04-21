@@ -63,7 +63,7 @@ cp .env.example .env
 | 变量名 | 说明 | 默认值 |
 |---|---|---|
 | `GITHUB_COPILOT_CLI_PATH` | Copilot CLI 可执行文件路径 | `copilot` |
-| `GITHUB_COPILOT_MODEL` | 使用的模型（如 `gpt-5.4`） | `gpt-5.4` |
+| `GITHUB_COPILOT_MODEL` | 使用的模型（如 `gpt-5-mini`） | `gpt-5-mini` |
 | `GITHUB_COPILOT_TIMEOUT` | 请求超时（秒） | `60` |
 | `GITHUB_COPILOT_LOG_LEVEL` | CLI 日志级别 | `info` |
 
