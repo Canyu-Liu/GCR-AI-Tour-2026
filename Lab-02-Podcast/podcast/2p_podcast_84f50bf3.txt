@@ -1,0 +1,91 @@
+Host:（音乐淡入）欢迎收听本期《并行世界》——我是主持人小李。今天请到 CUDA 专家林工，和我们聊聊如何用 GPU 把“慢任务”变成“快体验”。林工，欢迎！
+
+Guest: 谢谢小李，大家好，很高兴来聊聊 GPU 编程那些实战与技巧。
+
+Host: 开场先设个场景：有一段循环，要对百万级数组做元素乘加，CPU 单线程跑两三秒，但放到 GPU 上往往只需几十毫秒——差距令人震惊。把重复、大规模的计算交给成百上千个轻量级线程，是很多人学 CUDA 的动力。今天就从准备环境开始，按步骤把上手路径讲清楚。
+
+Guest: 好，直接进入第一个核心点：准备与环境。
+
+1) 准备与环境
+Host: 上 GPU 编程前最先要准备哪些东西？
+
+Guest: 主要四件事——硬件、驱动、Toolkit、示例与编译链。
+- 硬件：一块 NVIDIA GPU，注意消费级卡和数据中心卡在特性与双精度、显存上有差异；看清 Compute Capability（计算能力），确保需要的特性被支持。
+- 驱动：安装与 CUDA Toolkit 匹配的 NVIDIA 驱动，驱动与 Toolkit 版本要对应。
+- CUDA Toolkit：安装 Toolkit（含 nvcc、样例、常用库），确认 PATH 与 LD_LIBRARY_PATH。
+- 验证：用 nvidia-smi 检查显卡与驱动；运行 samples 下的 deviceQuery、bandwidthTest、vectorAdd、matrixMul 等示例验证环境。别忘了常用库：cuBLAS、cuFFT、Thrust 等，以及熟悉的编译链（gcc）。
+
+Host: 小技巧：先运行 nvidia-smi，再执行 samples 中的 deviceQuery 和 bandwidthTest，能快速定位环境问题。
+
+2) 并行模型入门
+Host: CUDA 的并行模型怎么理解？
+
+Guest: 核心是大量轻量级线程的组织与协作：
+- 线程（thread）是最小执行单元，按线程块（block）分组，线程块再组成网格（grid）。
+- 每个线程有自己的寄存器和局部内存；块内线程可用共享内存（shared memory）协作，并用 __syncthreads() 同步。
+- GPU 以 warp（通常 32 线程）为执行单位，warp 内的指令同时执行，分支会导致 warp 发散（divergence）。
+- 编程要考虑索引映射：threadIdx、blockIdx、blockDim、gridDim。例如向量加中，每个线程负责一个元素，索引 = blockIdx.x * blockDim.x + threadIdx.x。
+
+Host: 简单映射往往最有效，但良好索引设计是性能的第一步。
+
+3) 内存与性能优化
+Host: 性能的天花板常常在内存访问上。关键点有哪些？
+
+Guest: 关注存储层级与访问模式：
+- 存储层级：寄存器（最快但少）、共享内存（低延迟、块内共享）、全局内存（大但延迟高）、以及缓存（L1/L2）。
+- 合并（coalesced）访问：保证连续线程访问连续地址，避免非对齐访问。
+- 减少全局内存访问：把重用数据拉到 shared memory（如 tiled matrix multiply）。
+- 避免共享内存 bank conflict：按访问模式组织数据或用 padding。
+- 寄存器使用要平衡：寄存器占用太高会降低并发（occupancy）。
+- 利用流（stream）重叠传输与计算：异步 memcpy + kernel 可以掩盖数据传输延迟。
+- 选择合适的内存类型：常量内存或纹理内存对特定读模式有加速作用。
+
+Host: occupancy（占用率）是常用指标，但不是越高越好，要结合寄存器、共享内存和块大小综合判断。
+
+4) 内核设计与并行模式
+Host: 写内核时有哪些常见技巧？
+
+Guest: 一些实战经验：
+- 尽量减少分支和避免 warp 发散，把分支移到块级或用 predication。
+- 使用 warp 内原语（如 __shfl_sync）做快速归约或数据交换，能减少共享内存同步开销。
+- 并行归约（reduction）：常用树形归约、分阶归约（先在 block 内归约，再跨 block 处理）。
+- Tiled 算法：矩阵乘与卷积用 tiled + shared memory 能显著提升数据复用量。
+- 复用高层库：在可用时优先用 cuBLAS、cuDNN、Thrust，避免重复造轮子。
+- 写可配置的 kernel：把 blockDim/gridDim 参数化，便于后续的性能搜索（tuning）。
+
+Host: 举例：矩阵乘从简单三层循环到 tiled + shared memory，往往能提升好几个数量级。
+
+5) 工具与学习路径
+Host: 想快速定位性能瓶颈，哪些工具和资源值得用？
+
+Guest: 工具与方法：
+- 系统级分析：Nsight Systems（查看 CPU/GPU 协同、stream、kernel 调度）。
+- 内核级分析：Nsight Compute（每个 kernel 的寄存器、指令吞吐、内存带宽）。
+- 调试：cuda-memcheck、cuda-gdb；nvprof 已弃用，改用 Nsight 系列。
+- 测时技巧：用 cudaEventRecord 精确测时，先用小数据验证功能，再用大数据做性能分析。
+- 学习路线：从 vector add、dot product、naive matrix multiply 开始；进阶做 tiled matrix multiply、卷积、并行归约、scan（prefix-sum）；参考 CUDA samples、Thrust 示例。
+- 课程与书籍：Udacity、Coursera、《CUDA by Example》、《Programming Massively Parallel Processors》；社区有 NVIDIA Developer Forums、Stack Overflow、GitHub、r/CUDA 等。
+
+Host: 按这个路径走，能快速把理论落到练习里。
+
+结尾总结
+Host: 今天的要点麻烦再帮忙回顾一下。
+
+Guest: 简短回顾：
+- 环境先行：硬件、驱动、CUDA Toolkit 与 samples 验证；
+- 理解并行模型：线程、block、grid、warp 是编程基础；
+- 内存优化是性能核心：coalescing、shared memory、避免 bank conflicts、合理使用寄存器；
+- 内核设计要减少 divergence，使用并行模式（reduction、tiling、warp intrinsics）；
+- 善用 Nsight 等工具，并通过循序渐进的练习提升能力。
+
+Host: 给听众两项入门练习作为起点：
+1) 实现向量加（vector add），验证正确性并比较 CPU vs GPU 的时间差；
+2) 实现矩阵乘：先写 naive 版本，再用 tiled + shared memory 优化，用 Nsight Compute 找出热点并记录性能提升。
+
+Guest: 欢迎大家把代码、性能数据或遇到的问题分享到社群或本节目留言区。下一期挑几位听众的练习做代码走查与性能调优实战。
+
+Host:（音乐上扬）感谢林工的分享，也感谢各位听众。本期《并行世界》到此结束，动手试试 GPU 的威力，下次见！
+
+Guest: 下次见，祝大家调优顺利！
+
+（音乐淡出）
